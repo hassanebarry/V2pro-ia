@@ -17,10 +17,13 @@ with col2:
     away_team = st.text_input("✈️ ÉQUIPE EXTÉRIEURE", "Botswana")
 
 def calculer_prono(h_name, a_name):
+    # Stats automatiques pour le test
     h_force = 2.4 if "City" in h_name or "Sénégal" in h_name else 1.2
     a_force = 0.8 if "Forest" in a_name or "Botswana" in a_name else 1.1
+    
     prob_h = poisson.pmf(range(5), h_force)
     prob_a = poisson.pmf(range(5), a_force)
+    
     score_h = pd.Series(prob_h).idxmax()
     score_a = pd.Series(prob_a).idxmax()
     conf = (max(prob_h) * max(prob_a)) * 100

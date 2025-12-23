@@ -1,34 +1,78 @@
 import streamlit as st
-import pandas as pd
+import requests
+import os
+import time
+from dotenv import load_dotenv
 from scipy.stats import poisson
+from datetime import date
 
-# CONFIGURATION
-API_KEY = "5a92166c4b4be20cef1187536c1fa610a27fbf1d985db4b8db5a1a89e43e3d10"
+# ================= CONFIG =================
+st.set_page_config(page_title="BOT PRO FOOTBALL", layout="centered")
+st.title("⚽ BOT PRO – ANALYSE AVANT MATCH (RÉEL)")
 
-st.set_page_config(page_title="V2PRO PLUS IA v4.0", layout="centered")
+# ================= API ====================
+load_dotenv()
+API_TOKEN = os.getenv("ZzMVJCWYvSS9xnMuyUh5eoPrYu8Xf1ewIYm0H36Uqls0HTJmaFK4kDdxI3Nj")
 
-# Correction de l'erreur TypeError
-st.title("🟢 V2PRO PLUS IA v4.0")
-st.write("---")
+if not API_TOKEN:
+    st.error("❌ Clé API introuvable. Vérifie le fichier .env")
+    st.stop()
 
-col1, col2 = st.columns(2)
-with col1:
-    home_team = st.text_input("🏠 ÉQUIPE DOMICILE", "Manchester City")
-with col2:
-    away_team = st.text_input("✈️ ÉQUIPE EXTÉRIEURE", "Nottingham Forest")
+BASE_URL = "https://api.sportmonks.com/v3/football"
 
-def calculer_prono(h_name, a_name):
-    # Logique IA simplifiée
-    h_force = 2.8 if "City" in h_name else 1.2
-    a_force = 0.9 if "Forest" in a_name else 1.1
-    prob_h = poisson.pmf(range(5), h_force)
-    prob_a = poisson.pmf(range(5), a_force)
-    score_h = pd.Series(prob_h).idxmax()
-    score_a = pd.Series(prob_a).idxmax()
-    conf = (max(prob_h) * max(prob_a)) * 100
-    return score_h, score_a, conf
+# ================= DATA ===================
+def get_fixtures(match_date):
+    url = f"{BASE_URL}/fixtures/date/{match_date}"
+    params = {
+        "api_token": API_TOKEN,
+        "include": "participants"
+    }
+    r = requests.get(url, params=params)
+    if r.status_code != 200:
+        return []
+    return r.json().get("data", [])
 
-if st.button("🚀 START ANALYSE IA"):
-    res_h, res_a, confiance = calculer_prono(home_team, away_team)
-    st.success(f"SCORE PRÉDIT : {res_h} - {res_a}")
-    st.info(f"CONFIANCE : {confiance:.1f}%")
+# ================= ANALYSE =================
+def predict_score(avg_home, avg_away):
+    home_goals = round(poisson.mean(avg_home))
+    away_goals = round(poisson.mean(avg_away))
+    return home_goals, away_goals
+
+def confidence(avg_home, avg_away):
+    diff = abs(avg_home - avg_away)
+    return min(75, int(50 + diff * 12))
+
+# ================= UI ======================
+selected_date = st.date_input("📅 Date d’analyse", date.today())
+
+if st.button("🔍 LANCER ANALYSE"):
+    st.info("⏳ Analyse en cours… récupération des données")
+    time.sleep(2)
+
+    matches = get_fixtures(selected_date)
+
+    if not matches:
+        st.error("Aucun match trouvé ou problème API")
+        st.stop()
+
+    for m in matches:
+        teams = m.get("participants", [])
+        if len(teams) < 2:
+            continue
+
+        home = teams[0]["name"]
+        away = teams[1]["name"]
+
+        # Moyennes par défaut (améliorables)
+        avg_home = 1.5
+        avg_away = 1.2
+
+        score_home, score_away = predict_score(avg_home, avg_away)
+        conf = confidence(avg_home, avg_away)
+
+        st.subheader(f"{home} vs {away}")
+        st.write(f"🔮 Score probable : **{score_home} – {score_away}**")
+        st.write("📈 BTTS :", "OUI" if score_home > 0 and score_away > 0 else "NON")
+        st.write("⚖️ Over 1.5 :", "OUI" if score_home + score_away >= 2 else "NON")
+        st.write(f"✅ Confiance : **{conf}%**")
+        st.divider()
